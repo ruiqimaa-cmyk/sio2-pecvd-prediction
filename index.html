@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SiO2 PECVD 预测模型</title>
+    <style>
+      :root { font-family: "Microsoft YaHei", Arial, sans-serif; color: #17202a; background: #f4f6f8; }
+      * { box-sizing: border-box; }
+      body { margin: 0; }
+      main { padding: 28px clamp(16px, 4vw, 56px) 48px; }
+      header { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; padding-bottom: 22px; border-bottom: 2px solid #8f1d21; }
+      h1, h2 { margin: 0; letter-spacing: 0; }
+      h1 { font-size: clamp(30px, 4vw, 52px); line-height: 1.05; }
+      h2 { font-size: 20px; }
+      .eyebrow { margin: 0 0 6px; color: #8f1d21; font-weight: 700; }
+      .status { padding: 10px 12px; border: 1px solid #c8d0d8; background: #fff; color: #566573; white-space: nowrap; }
+      .workspace { display: grid; grid-template-columns: minmax(300px, 390px) 1fr; gap: 20px; margin-top: 26px; }
+      .panel, .band { background: #fff; border: 1px solid #d5dbe3; border-radius: 8px; padding: 22px; box-shadow: 0 8px 24px rgba(17,24,39,.06); }
+      .title { display: flex; gap: 10px; align-items: center; color: #8f1d21; margin-bottom: 18px; }
+      label { display: block; margin: 18px 0 8px; font-weight: 700; color: #34495e; }
+      input, select, button { font: inherit; }
+      input, select { width: 100%; height: 42px; border: 1px solid #bfc8d2; border-radius: 6px; padding: 8px 10px; background: #fbfcfd; }
+      .rangeRow { display: grid; grid-template-columns: 1fr 96px; gap: 12px; align-items: center; }
+      .save { margin-top: 22px; width: 100%; height: 46px; border: 0; border-radius: 6px; background: #1f6f8b; color: #fff; font-weight: 700; cursor: pointer; }
+      .grid { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 14px; }
+      .metric { min-height: 96px; border: 1px solid #dde3ea; border-radius: 8px; padding: 16px; background: #fbfcfd; }
+      .metric span { display: block; color: #64748b; font-size: 14px; }
+      .metric strong { display: block; margin-top: 5px; font-size: clamp(20px, 2.4vw, 30px); }
+      .note { margin-top: 18px; padding: 14px 16px; background: #f6f8fa; border-left: 4px solid #1f6f8b; line-height: 1.7; }
+      .band { margin-top: 20px; }
+      table { width: 100%; min-width: 760px; border-collapse: collapse; }
+      .tableWrap { overflow-x: auto; }
+      th, td { padding: 12px 10px; text-align: left; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+      th { background: #f3f6f9; }
+      .figures { margin-top: 20px; display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 20px; }
+      .figures img { width: 100%; background: #fff; border: 1px solid #d5dbe3; border-radius: 8px; display: block; }
+      @media (max-width: 900px) { header, .workspace { display: block; } .status { margin-top: 16px; display: inline-block; } .grid, .figures { grid-template-columns: 1fr; } .panel + .panel { margin-top: 20px; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">SiO2 / SiOx PECVD Prediction</p>
+          <h1>等离子体沉积结果预测模型</h1>
+        </div>
+        <div class="status" id="dbStatus">本地预测模式</div>
+      </header>
+
+      <section class="workspace">
+        <div class="panel">
+          <div class="title"><h2>实验条件输入</h2></div>
+          <label for="electrode">电极结构</label>
+          <select id="electrode">
+            <option value="planar">平面电极</option>
+            <option value="structured">结构化电极</option>
+          </select>
+          <label for="xCm">X 坐标 cm</label>
+          <input id="xCm" type="number" min="-8" max="8" step="0.1" value="0" />
+          <label for="yCm">Y 坐标 cm</label>
+          <input id="yCm" type="number" min="-9.6" max="9.6" step="0.1" value="0" />
+          <label for="pressureRange">压力 Torr</label>
+          <div class="rangeRow">
+            <input id="pressureRange" type="range" min="1" max="2.2" step="0.02" value="1.2" />
+            <input id="pressure" type="number" min="0.5" max="3" step="0.02" value="1.2" />
+          </div>
+          <button class="save" id="saveBtn">保存本次预测</button>
+          <p id="saveState">预测会立即在本地计算。</p>
+        </div>
+
+        <div class="panel">
+          <div class="title"><h2>预测结果</h2></div>
+          <div class="grid">
+            <div class="metric"><span>预测膜厚</span><strong id="thickness">-</strong></div>
+            <div class="metric"><span>沉积速率</span><strong id="rate">-</strong></div>
+            <div class="metric"><span>均匀性参数</span><strong id="uniformity">-</strong></div>
+            <div class="metric"><span>模型版本</span><strong>York-SiO2-PECVD-v1</strong></div>
+          </div>
+          <div class="note" id="note"></div>
+        </div>
+      </section>
+
+      <section class="band">
+        <div class="title"><h2>推荐实验条件</h2></div>
+        <div class="tableWrap">
+          <table>
+            <thead><tr><th>排序</th><th>电极</th><th>压力 Torr</th><th>压力 Pa</th><th>沉积速率</th><th>均匀性</th><th>综合评分</th></tr></thead>
+            <tbody id="recommendationBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="band">
+        <div class="title"><h2>最近预测记录</h2></div>
+        <div class="tableWrap">
+          <table>
+            <thead><tr><th>ID</th><th>时间</th><th>电极</th><th>X</th><th>Y</th><th>压力 Torr</th><th>膜厚 nm</th><th>沉积速率</th><th>均匀性</th></tr></thead>
+            <tbody id="recentBody"><tr><td colspan="9">正在读取 Supabase...</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="band">
+        <div class="title"><h2>模型评价</h2></div>
+        <div class="grid">
+          <div class="metric"><span>膜厚空间预测</span><strong>R2 0.970</strong></div>
+          <div class="metric"><span>沉积速率预测</span><strong>R2 0.949</strong></div>
+          <div class="metric"><span>均匀性预测</span><strong>R2 0.783</strong></div>
+          <div class="metric"><span>数据来源</span><strong>York SiO2 PECVD</strong></div>
+        </div>
+      </section>
+
+      <section class="figures">
+        <img src="./public/figures/model_A_thickness_pred_vs_true.png" alt="膜厚预测值与真实值对比" />
+        <img src="./public/figures/model_B_pressure_rate_curve.png" alt="压力与沉积速率预测曲线" />
+        <img src="./public/figures/model_C_pressure_uniformity_curve.png" alt="压力与均匀性预测曲线" />
+        <img src="./public/figures/model_A_thickness_feature_importance.png" alt="膜厚模型特征重要性" />
+      </section>
+    </main>
+    <script>
+      const MODEL_VERSION = "York-SiO2-PECVD-v1";
+      const SUPABASE_URL = "https://rspjfcltiaporaeqwlwt.supabase.co";
+      const SUPABASE_ANON_KEY = "sb_publishable_GD21PT-RDI1Xw78iUvdqYQ_Ma53LpFR";
+      const label = { planar: "平面电极", structured: "结构化电极" };
+      const thicknessCoef = { intercept:1261.445798773972, x_cm:-1.2635352661684998, y_cm:2.2220562995090063, electrode_structured:-106.02912780090551, x2:-0.9041430651443294, y2:-1.35453031573571, xy:0.036075616457753146, radius_cm:11.007267954956774, x_cm_x_structured:2.7200903455301635, y_cm_x_structured:0.15531365986010748, x2_x_structured:1.9076641790153142, y2_x_structured:2.1262386931490127, xy_x_structured:0.045883128652353555, radius_cm_x_structured:-16.920646761907044 };
+      const rateCoef = { intercept:222.17976836696857, pressure_Torr:-19.180657991089063, electrode_structured:0.458802514217183, pressure2:-20.55787720232165, pressure_Torr_x_structured:-12.00327086299896, pressure2_x_structured:2.0513180406538094 };
+      const uniformityCoef = { intercept:-4.221911205818396, pressure_Torr:3.7882542295837123, electrode_structured:3.0210464271762567, pressure2:2.9312666436751664, pressure_Torr_x_structured:-0.40377151034436987, pressure2_x_structured:-2.7805618865726203 };
+      const $ = (id) => document.getElementById(id);
+      const fmt = (v, d = 2) => Number.isFinite(v) ? v.toFixed(d) : "-";
+      const dot = (coef, features) => Object.entries(coef).reduce((sum, [key, value]) => sum + value * (features[key] || 0), 0);
+      function predict() {
+        const electrodeType = $("electrode").value;
+        const s = electrodeType === "structured" ? 1 : 0;
+        const x = Number($("xCm").value);
+        const y = Number($("yCm").value);
+        const p = Number($("pressure").value);
+        const r = Math.sqrt(x*x + y*y);
+        const thicknessFeatures = { intercept:1, x_cm:x, y_cm:y, electrode_structured:s, x2:x*x, y2:y*y, xy:x*y, radius_cm:r, x_cm_x_structured:x*s, y_cm_x_structured:y*s, x2_x_structured:x*x*s, y2_x_structured:y*y*s, xy_x_structured:x*y*s, radius_cm_x_structured:r*s };
+        const processFeatures = { intercept:1, pressure_Torr:p, electrode_structured:s, pressure2:p*p, pressure_Torr_x_structured:p*s, pressure2_x_structured:p*p*s };
+        return { modelVersion:MODEL_VERSION, electrodeType, xCm:x, yCm:y, pressureTorr:p, pressurePa:p*133.322, filmThicknessNm:dot(thicknessCoef, thicknessFeatures), depositionRateNmMin:dot(rateCoef, processFeatures), uniformityParameter:dot(uniformityCoef, processFeatures) };
+      }
+      function render() {
+        const row = predict();
+        $("thickness").textContent = `${fmt(row.filmThicknessNm)} nm`;
+        $("rate").textContent = `${fmt(row.depositionRateNmMin)} nm/min`;
+        $("uniformity").textContent = fmt(row.uniformityParameter);
+        $("note").textContent = row.pressureTorr >= 1 && row.pressureTorr <= 2.2 ? "压力位于 York 数据集训练范围内。本模型适合作为实验设计前的趋势参考。" : "压力超出 York 数据集 1.0-2.2 Torr 范围，预测只适合趋势参考。";
+      }
+      function recommendations() {
+        const rows = [];
+        for (const electrodeType of ["planar", "structured"]) {
+          for (let i = 0; i <= 60; i++) {
+            $("electrode").value = electrodeType; $("pressure").value = (1 + i * 0.02).toFixed(2); $("xCm").value = 0; $("yCm").value = 0;
+            rows.push(predict());
+          }
+        }
+        const rateMin = Math.min(...rows.map(r => r.depositionRateNmMin));
+        const rateMax = Math.max(...rows.map(r => r.depositionRateNmMin));
+        const uniMin = Math.min(...rows.map(r => r.uniformityParameter));
+        const uniMax = Math.max(...rows.map(r => r.uniformityParameter));
+        return rows.map(row => {
+          const rateScore = (row.depositionRateNmMin - rateMin) / (rateMax - rateMin);
+          const uniformityScore = 1 - (row.uniformityParameter - uniMin) / (uniMax - uniMin);
+          return { ...row, combinedScore: 0.55 * rateScore + 0.45 * uniformityScore };
+        }).sort((a,b) => b.combinedScore - a.combinedScore).slice(0,8);
+      }
+      function renderRecommendations() {
+        const original = { electrode:$("electrode").value, pressure:$("pressure").value, x:$("xCm").value, y:$("yCm").value };
+        $("recommendationBody").innerHTML = recommendations().map((row, i) => `<tr><td>${i+1}</td><td>${label[row.electrodeType]}</td><td>${fmt(row.pressureTorr,2)}</td><td>${fmt(row.pressurePa,1)}</td><td>${fmt(row.depositionRateNmMin,2)} nm/min</td><td>${fmt(row.uniformityParameter,2)}</td><td>${fmt(row.combinedScore,3)}</td></tr>`).join("");
+        $("electrode").value = original.electrode; $("pressure").value = original.pressure; $("pressureRange").value = original.pressure; $("xCm").value = original.x; $("yCm").value = original.y;
+      }
+      async function loadRecentLogs() {
+        if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+          $("recentBody").innerHTML = `<tr><td colspan="9">未配置 Supabase。</td></tr>`;
+          return;
+        }
+        try {
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/prediction_logs?select=*&order=id.desc&limit=10`, {
+            headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
+          });
+          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+          const rows = await res.json();
+          $("recentBody").innerHTML = rows.length ? rows.map(row => {
+            const time = row.created_at ? new Date(row.created_at).toLocaleString("zh-CN", { hour12:false }) : "-";
+            return `<tr><td>${row.id}</td><td>${time}</td><td>${label[row.electrode_type] || row.electrode_type}</td><td>${fmt(Number(row.x_cm),1)}</td><td>${fmt(Number(row.y_cm),1)}</td><td>${fmt(Number(row.pressure_torr),2)}</td><td>${fmt(Number(row.predicted_film_thickness_nm),2)}</td><td>${fmt(Number(row.predicted_deposition_rate_nm_min),2)}</td><td>${fmt(Number(row.predicted_uniformity_parameter),2)}</td></tr>`;
+          }).join("") : `<tr><td colspan="9">暂无记录。</td></tr>`;
+        } catch (error) {
+          $("recentBody").innerHTML = `<tr><td colspan="9">读取失败：${error.message}</td></tr>`;
+        }
+      }
+      async function savePrediction() {
+        if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { $("saveState").textContent = "未配置 Supabase，当前只做本地预测。"; return; }
+        const p = predict();
+        const payload = { model_version:p.modelVersion, electrode_type:p.electrodeType, x_cm:p.xCm, y_cm:p.yCm, pressure_torr:p.pressureTorr, pressure_pa:p.pressurePa, predicted_film_thickness_nm:p.filmThicknessNm, predicted_deposition_rate_nm_min:p.depositionRateNmMin, predicted_uniformity_parameter:p.uniformityParameter, confidence_note:"static html prediction" };
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/prediction_logs`, { method:"POST", headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${SUPABASE_ANON_KEY}`, "Content-Type":"application/json", Prefer:"return=minimal" }, body:JSON.stringify(payload) });
+        $("saveState").textContent = res.ok ? "已保存到 Supabase。" : `保存失败：${res.status}`;
+        if (res.ok) loadRecentLogs();
+      }
+      $("dbStatus").textContent = SUPABASE_URL && SUPABASE_ANON_KEY ? "Supabase 已配置" : "本地预测模式";
+      ["electrode","xCm","yCm","pressure"].forEach(id => $(id).addEventListener("input", () => { $("pressureRange").value = $("pressure").value; render(); }));
+      $("pressureRange").addEventListener("input", () => { $("pressure").value = $("pressureRange").value; render(); });
+      $("saveBtn").addEventListener("click", savePrediction);
+      renderRecommendations(); render(); loadRecentLogs();
+    </script>
+  </body>
+</html>
