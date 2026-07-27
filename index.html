@@ -22,6 +22,9 @@
       input, select, button { font: inherit; }
       input, select { width: 100%; height: 42px; border: 1px solid #bfc8d2; border-radius: 6px; padding: 8px 10px; background: #fbfcfd; }
       .rangeRow { display: grid; grid-template-columns: 1fr 96px; gap: 12px; align-items: center; }
+      .fieldGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .fieldGrid label { margin-top: 12px; }
+      .subhead { margin: 18px 0 4px; padding-top: 14px; border-top: 1px solid #e2e8f0; color: #8f1d21; font-weight: 700; }
       .save { margin-top: 22px; width: 100%; height: 46px; border: 0; border-radius: 6px; background: #1f6f8b; color: #fff; font-weight: 700; cursor: pointer; }
       .grid { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 14px; }
       .metric { min-height: 96px; border: 1px solid #dde3ea; border-radius: 8px; padding: 16px; background: #fbfcfd; }
@@ -65,6 +68,21 @@
             <input id="pressureRange" type="range" min="1" max="2.2" step="0.02" value="1.2" />
             <input id="pressure" type="number" min="0.5" max="3" step="0.02" value="1.2" />
           </div>
+          <div class="subhead">已知实验结果输入（可选）</div>
+          <div class="fieldGrid">
+            <label for="knownThickness">膜厚 nm
+              <input id="knownThickness" type="number" min="0" step="0.1" placeholder="未测可不填" />
+            </label>
+            <label for="knownRefractiveIndex">折射率
+              <input id="knownRefractiveIndex" type="number" min="1" step="0.0001" placeholder="未测可不填" />
+            </label>
+            <label for="knownRate">沉积速率 nm/min
+              <input id="knownRate" type="number" min="0" step="0.01" placeholder="未测可不填" />
+            </label>
+            <label for="knownUniformity">均匀性参数
+              <input id="knownUniformity" type="number" min="0" step="0.01" placeholder="未测可不填" />
+            </label>
+          </div>
           <button class="save" id="saveBtn">保存本次预测</button>
           <p id="saveState">预测会立即在本地计算。</p>
         </div>
@@ -73,9 +91,10 @@
           <div class="title"><h2>预测结果</h2></div>
           <div class="grid">
             <div class="metric"><span>预测膜厚</span><strong id="thickness">-</strong></div>
+            <div class="metric"><span>预测折射率</span><strong id="refractiveIndex">-</strong></div>
             <div class="metric"><span>沉积速率</span><strong id="rate">-</strong></div>
             <div class="metric"><span>均匀性参数</span><strong id="uniformity">-</strong></div>
-            <div class="metric"><span>模型版本</span><strong>York-SiO2-PECVD-v1</strong></div>
+            <div class="metric"><span>模型版本</span><strong>York-SiO2-PECVD-v2</strong></div>
           </div>
           <div class="note" id="note"></div>
         </div>
@@ -95,8 +114,8 @@
         <div class="title"><h2>最近预测记录</h2></div>
         <div class="tableWrap">
           <table>
-            <thead><tr><th>ID</th><th>时间</th><th>电极</th><th>X</th><th>Y</th><th>压力 Torr</th><th>膜厚 nm</th><th>沉积速率</th><th>均匀性</th></tr></thead>
-            <tbody id="recentBody"><tr><td colspan="9">正在读取 Supabase...</td></tr></tbody>
+            <thead><tr><th>ID</th><th>时间</th><th>电极</th><th>X</th><th>Y</th><th>压力 Torr</th><th>预测膜厚</th><th>预测折射率</th><th>沉积速率</th><th>均匀性</th><th>实测膜厚</th></tr></thead>
+            <tbody id="recentBody"><tr><td colspan="11">正在读取 Supabase...</td></tr></tbody>
           </table>
         </div>
       </section>
@@ -105,9 +124,9 @@
         <div class="title"><h2>模型评价</h2></div>
         <div class="grid">
           <div class="metric"><span>膜厚空间预测</span><strong>R2 0.970</strong></div>
+          <div class="metric"><span>折射率趋势预测</span><strong>MAE 0.0019</strong></div>
           <div class="metric"><span>沉积速率预测</span><strong>R2 0.949</strong></div>
           <div class="metric"><span>均匀性预测</span><strong>R2 0.783</strong></div>
-          <div class="metric"><span>数据来源</span><strong>York SiO2 PECVD</strong></div>
         </div>
       </section>
 
@@ -119,15 +138,22 @@
       </section>
     </main>
     <script>
-      const MODEL_VERSION = "York-SiO2-PECVD-v1";
+      const MODEL_VERSION = "York-SiO2-PECVD-v2";
       const SUPABASE_URL = "https://rspjfcltiaporaeqwlwt.supabase.co";
       const SUPABASE_ANON_KEY = "sb_publishable_GD21PT-RDI1Xw78iUvdqYQ_Ma53LpFR";
       const label = { planar: "平面电极", structured: "结构化电极" };
       const thicknessCoef = { intercept:1261.445798773972, x_cm:-1.2635352661684998, y_cm:2.2220562995090063, electrode_structured:-106.02912780090551, x2:-0.9041430651443294, y2:-1.35453031573571, xy:0.036075616457753146, radius_cm:11.007267954956774, x_cm_x_structured:2.7200903455301635, y_cm_x_structured:0.15531365986010748, x2_x_structured:1.9076641790153142, y2_x_structured:2.1262386931490127, xy_x_structured:0.045883128652353555, radius_cm_x_structured:-16.920646761907044 };
       const rateCoef = { intercept:222.17976836696857, pressure_Torr:-19.180657991089063, electrode_structured:0.458802514217183, pressure2:-20.55787720232165, pressure_Torr_x_structured:-12.00327086299896, pressure2_x_structured:2.0513180406538094 };
       const uniformityCoef = { intercept:-4.221911205818396, pressure_Torr:3.7882542295837123, electrode_structured:3.0210464271762567, pressure2:2.9312666436751664, pressure_Torr_x_structured:-0.40377151034436987, pressure2_x_structured:-2.7805618865726203 };
+      const refractiveIndexCoef = { intercept:1.4571303371845636, pressure_Torr:-0.007834253622603909, electrode_structured:-0.020312731980142953, pressure2:0.0025131550310219936, pressure_Torr_x_structured:0.021482230907374538, pressure2_x_structured:-0.005274360441993481 };
       const $ = (id) => document.getElementById(id);
       const fmt = (v, d = 2) => Number.isFinite(v) ? v.toFixed(d) : "-";
+      const optionalNumber = (id) => {
+        const value = $(id).value.trim();
+        if (!value) return null;
+        const number = Number(value);
+        return Number.isFinite(number) ? number : null;
+      };
       const dot = (coef, features) => Object.entries(coef).reduce((sum, [key, value]) => sum + value * (features[key] || 0), 0);
       function predict() {
         const electrodeType = $("electrode").value;
@@ -138,14 +164,41 @@
         const r = Math.sqrt(x*x + y*y);
         const thicknessFeatures = { intercept:1, x_cm:x, y_cm:y, electrode_structured:s, x2:x*x, y2:y*y, xy:x*y, radius_cm:r, x_cm_x_structured:x*s, y_cm_x_structured:y*s, x2_x_structured:x*x*s, y2_x_structured:y*y*s, xy_x_structured:x*y*s, radius_cm_x_structured:r*s };
         const processFeatures = { intercept:1, pressure_Torr:p, electrode_structured:s, pressure2:p*p, pressure_Torr_x_structured:p*s, pressure2_x_structured:p*p*s };
-        return { modelVersion:MODEL_VERSION, electrodeType, xCm:x, yCm:y, pressureTorr:p, pressurePa:p*133.322, filmThicknessNm:dot(thicknessCoef, thicknessFeatures), depositionRateNmMin:dot(rateCoef, processFeatures), uniformityParameter:dot(uniformityCoef, processFeatures) };
+        const filmThicknessNm = dot(thicknessCoef, thicknessFeatures);
+        const refractiveIndex = dot(refractiveIndexCoef, processFeatures);
+        const depositionRateNmMin = dot(rateCoef, processFeatures);
+        const uniformityParameter = dot(uniformityCoef, processFeatures);
+        return {
+          modelVersion:MODEL_VERSION,
+          electrodeType,
+          xCm:x,
+          yCm:y,
+          radiusCm:r,
+          pressureTorr:p,
+          pressurePa:p*133.322,
+          filmThicknessNm,
+          refractiveIndex,
+          depositionRateNmMin,
+          uniformityParameter,
+          knownFilmThicknessNm: optionalNumber("knownThickness"),
+          knownRefractiveIndex: optionalNumber("knownRefractiveIndex"),
+          knownDepositionRateNmMin: optionalNumber("knownRate"),
+          knownUniformityParameter: optionalNumber("knownUniformity")
+        };
       }
       function render() {
         const row = predict();
         $("thickness").textContent = `${fmt(row.filmThicknessNm)} nm`;
+        $("refractiveIndex").textContent = fmt(row.refractiveIndex, 4);
         $("rate").textContent = `${fmt(row.depositionRateNmMin)} nm/min`;
         $("uniformity").textContent = fmt(row.uniformityParameter);
-        $("note").textContent = row.pressureTorr >= 1 && row.pressureTorr <= 2.2 ? "压力位于 York 数据集训练范围内。本模型适合作为实验设计前的趋势参考。" : "压力超出 York 数据集 1.0-2.2 Torr 范围，预测只适合趋势参考。";
+        const deltas = [
+          row.knownFilmThicknessNm !== null ? `膜厚差值 ${fmt(row.knownFilmThicknessNm - row.filmThicknessNm)} nm` : "",
+          row.knownRefractiveIndex !== null ? `折射率差值 ${fmt(row.knownRefractiveIndex - row.refractiveIndex, 4)}` : "",
+          row.knownDepositionRateNmMin !== null ? `沉积速率差值 ${fmt(row.knownDepositionRateNmMin - row.depositionRateNmMin)} nm/min` : "",
+          row.knownUniformityParameter !== null ? `均匀性差值 ${fmt(row.knownUniformityParameter - row.uniformityParameter)}` : ""
+        ].filter(Boolean);
+        $("note").textContent = (row.pressureTorr >= 1 && row.pressureTorr <= 2.2 ? "压力位于 York 数据集训练范围内。本模型适合作为实验设计前的趋势参考。" : "压力超出 York 数据集 1.0-2.2 Torr 范围，预测只适合趋势参考。") + (deltas.length ? ` 已输入实测值：${deltas.join("；")}。` : "");
       }
       function recommendations() {
         const rows = [];
@@ -172,7 +225,7 @@
       }
       async function loadRecentLogs() {
         if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-          $("recentBody").innerHTML = `<tr><td colspan="9">未配置 Supabase。</td></tr>`;
+          $("recentBody").innerHTML = `<tr><td colspan="11">未配置 Supabase。</td></tr>`;
           return;
         }
         try {
@@ -183,22 +236,44 @@
           const rows = await res.json();
           $("recentBody").innerHTML = rows.length ? rows.map(row => {
             const time = row.created_at ? new Date(row.created_at).toLocaleString("zh-CN", { hour12:false }) : "-";
-            return `<tr><td>${row.id}</td><td>${time}</td><td>${label[row.electrode_type] || row.electrode_type}</td><td>${fmt(Number(row.x_cm),1)}</td><td>${fmt(Number(row.y_cm),1)}</td><td>${fmt(Number(row.pressure_torr),2)}</td><td>${fmt(Number(row.predicted_film_thickness_nm),2)}</td><td>${fmt(Number(row.predicted_deposition_rate_nm_min),2)}</td><td>${fmt(Number(row.predicted_uniformity_parameter),2)}</td></tr>`;
-          }).join("") : `<tr><td colspan="9">暂无记录。</td></tr>`;
+            const meta = row.client_metadata || {};
+            return `<tr><td>${row.id}</td><td>${time}</td><td>${label[row.electrode_type] || row.electrode_type}</td><td>${fmt(Number(row.x_cm),1)}</td><td>${fmt(Number(row.y_cm),1)}</td><td>${fmt(Number(row.pressure_torr),2)}</td><td>${fmt(Number(row.predicted_film_thickness_nm),2)}</td><td>${fmt(Number(meta.predicted_refractive_index),4)}</td><td>${fmt(Number(row.predicted_deposition_rate_nm_min),2)}</td><td>${fmt(Number(row.predicted_uniformity_parameter),2)}</td><td>${meta.known_film_thickness_nm ?? "-"}</td></tr>`;
+          }).join("") : `<tr><td colspan="11">暂无记录。</td></tr>`;
         } catch (error) {
-          $("recentBody").innerHTML = `<tr><td colspan="9">读取失败：${error.message}</td></tr>`;
+          $("recentBody").innerHTML = `<tr><td colspan="11">读取失败：${error.message}</td></tr>`;
         }
       }
       async function savePrediction() {
         if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { $("saveState").textContent = "未配置 Supabase，当前只做本地预测。"; return; }
         const p = predict();
-        const payload = { model_version:p.modelVersion, electrode_type:p.electrodeType, x_cm:p.xCm, y_cm:p.yCm, pressure_torr:p.pressureTorr, pressure_pa:p.pressurePa, predicted_film_thickness_nm:p.filmThicknessNm, predicted_deposition_rate_nm_min:p.depositionRateNmMin, predicted_uniformity_parameter:p.uniformityParameter, confidence_note:"static html prediction" };
+        const payload = {
+          model_version:p.modelVersion,
+          electrode_type:p.electrodeType,
+          x_cm:p.xCm,
+          y_cm:p.yCm,
+          pressure_torr:p.pressureTorr,
+          pressure_pa:p.pressurePa,
+          predicted_film_thickness_nm:p.filmThicknessNm,
+          predicted_deposition_rate_nm_min:p.depositionRateNmMin,
+          predicted_uniformity_parameter:p.uniformityParameter,
+          confidence_note:"static html prediction",
+          client_metadata:{
+            app:"sio2-pecvd-prediction-static",
+            radius_cm:p.radiusCm,
+            predicted_refractive_index:p.refractiveIndex,
+            known_film_thickness_nm:p.knownFilmThicknessNm,
+            known_refractive_index:p.knownRefractiveIndex,
+            known_deposition_rate_nm_min:p.knownDepositionRateNmMin,
+            known_uniformity_parameter:p.knownUniformityParameter,
+            saved_at:new Date().toISOString()
+          }
+        };
         const res = await fetch(`${SUPABASE_URL}/rest/v1/prediction_logs`, { method:"POST", headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${SUPABASE_ANON_KEY}`, "Content-Type":"application/json", Prefer:"return=minimal" }, body:JSON.stringify(payload) });
         $("saveState").textContent = res.ok ? "已保存到 Supabase。" : `保存失败：${res.status}`;
         if (res.ok) loadRecentLogs();
       }
       $("dbStatus").textContent = SUPABASE_URL && SUPABASE_ANON_KEY ? "Supabase 已配置" : "本地预测模式";
-      ["electrode","xCm","yCm","pressure"].forEach(id => $(id).addEventListener("input", () => { $("pressureRange").value = $("pressure").value; render(); }));
+      ["electrode","xCm","yCm","pressure","knownThickness","knownRefractiveIndex","knownRate","knownUniformity"].forEach(id => $(id).addEventListener("input", () => { $("pressureRange").value = $("pressure").value; render(); }));
       $("pressureRange").addEventListener("input", () => { $("pressure").value = $("pressureRange").value; render(); });
       $("saveBtn").addEventListener("click", savePrediction);
       renderRecommendations(); render(); loadRecentLogs();
