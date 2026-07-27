@@ -83,8 +83,8 @@
               <input id="knownUniformity" type="number" min="0" step="0.01" placeholder="未测可不填" />
             </label>
           </div>
-          <button class="save" id="saveBtn">保存本次预测</button>
-          <p id="saveState">预测会立即在本地计算。</p>
+          <button class="save" id="saveBtn">生成预测结果并保存</button>
+          <p id="saveState">输入参数后点击按钮生成预测，并自动保存记录。</p>
         </div>
 
         <div class="panel">
@@ -186,8 +186,7 @@
           knownUniformityParameter: optionalNumber("knownUniformity")
         };
       }
-      function render() {
-        const row = predict();
+      function render(row = predict()) {
         $("thickness").textContent = `${fmt(row.filmThicknessNm)} nm`;
         $("refractiveIndex").textContent = fmt(row.refractiveIndex, 4);
         $("rate").textContent = `${fmt(row.depositionRateNmMin)} nm/min`;
@@ -199,6 +198,15 @@
           row.knownUniformityParameter !== null ? `均匀性差值 ${fmt(row.knownUniformityParameter - row.uniformityParameter)}` : ""
         ].filter(Boolean);
         $("note").textContent = (row.pressureTorr >= 1 && row.pressureTorr <= 2.2 ? "压力位于 York 数据集训练范围内。本模型适合作为实验设计前的趋势参考。" : "压力超出 York 数据集 1.0-2.2 Torr 范围，预测只适合趋势参考。") + (deltas.length ? ` 已输入实测值：${deltas.join("；")}。` : "");
+        return row;
+      }
+      function markPending() {
+        $("thickness").textContent = "-";
+        $("refractiveIndex").textContent = "-";
+        $("rate").textContent = "-";
+        $("uniformity").textContent = "-";
+        $("note").textContent = "参数已更新，请点击“生成预测结果并保存”。";
+        $("saveState").textContent = "等待生成预测。";
       }
       function recommendations() {
         const rows = [];
@@ -243,9 +251,8 @@
           $("recentBody").innerHTML = `<tr><td colspan="11">读取失败：${error.message}</td></tr>`;
         }
       }
-      async function savePrediction() {
+      async function savePrediction(p) {
         if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { $("saveState").textContent = "未配置 Supabase，当前只做本地预测。"; return; }
-        const p = predict();
         const payload = {
           model_version:p.modelVersion,
           electrode_type:p.electrodeType,
@@ -272,11 +279,16 @@
         $("saveState").textContent = res.ok ? "已保存到 Supabase。" : `保存失败：${res.status}`;
         if (res.ok) loadRecentLogs();
       }
+      async function generatePrediction() {
+        $("saveState").textContent = "正在生成预测并保存...";
+        const row = render();
+        await savePrediction(row);
+      }
       $("dbStatus").textContent = SUPABASE_URL && SUPABASE_ANON_KEY ? "Supabase 已配置" : "本地预测模式";
-      ["electrode","xCm","yCm","pressure","knownThickness","knownRefractiveIndex","knownRate","knownUniformity"].forEach(id => $(id).addEventListener("input", () => { $("pressureRange").value = $("pressure").value; render(); }));
-      $("pressureRange").addEventListener("input", () => { $("pressure").value = $("pressureRange").value; render(); });
-      $("saveBtn").addEventListener("click", savePrediction);
-      renderRecommendations(); render(); loadRecentLogs();
+      ["electrode","xCm","yCm","pressure","knownThickness","knownRefractiveIndex","knownRate","knownUniformity"].forEach(id => $(id).addEventListener("input", () => { $("pressureRange").value = $("pressure").value; markPending(); }));
+      $("pressureRange").addEventListener("input", () => { $("pressure").value = $("pressureRange").value; markPending(); });
+      $("saveBtn").addEventListener("click", generatePrediction);
+      renderRecommendations(); markPending(); loadRecentLogs();
     </script>
   </body>
 </html>
